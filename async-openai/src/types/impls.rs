@@ -7,23 +7,26 @@ use crate::{
     download::{download_url, save_b64},
     error::OpenAIError,
     types::InputSource,
-    util::{create_all_dir, create_file_part},
+    util::{create_all_dir, create_file_part, AsyncTryFrom},
 };
 
 use bytes::Bytes;
 
 use super::{
-    AudioInput, AudioResponseFormat, ChatCompletionFunctionCall, ChatCompletionFunctions,
-    ChatCompletionNamedToolChoice, ChatCompletionRequestAssistantMessage,
-    ChatCompletionRequestFunctionMessage, ChatCompletionRequestMessage,
-    ChatCompletionRequestMessageContentPart, ChatCompletionRequestMessageContentPartImage,
-    ChatCompletionRequestMessageContentPartText, ChatCompletionRequestSystemMessage,
-    ChatCompletionRequestToolMessage, ChatCompletionRequestUserMessage,
-    ChatCompletionRequestUserMessageContent, ChatCompletionToolChoiceOption, CreateFileRequest,
+    AddUploadPartRequest, AudioInput, AudioResponseFormat, ChatCompletionFunctionCall,
+    ChatCompletionFunctions, ChatCompletionNamedToolChoice, ChatCompletionRequestAssistantMessage,
+    ChatCompletionRequestAssistantMessageContent, ChatCompletionRequestDeveloperMessage,
+    ChatCompletionRequestDeveloperMessageContent, ChatCompletionRequestFunctionMessage,
+    ChatCompletionRequestMessage, ChatCompletionRequestMessageContentPartAudio,
+    ChatCompletionRequestMessageContentPartImage, ChatCompletionRequestMessageContentPartText,
+    ChatCompletionRequestSystemMessage, ChatCompletionRequestSystemMessageContent,
+    ChatCompletionRequestToolMessage, ChatCompletionRequestToolMessageContent,
+    ChatCompletionRequestUserMessage, ChatCompletionRequestUserMessageContent,
+    ChatCompletionRequestUserMessageContentPart, ChatCompletionToolChoiceOption, CreateFileRequest,
     CreateImageEditRequest, CreateImageVariationRequest, CreateMessageRequestContent,
     CreateSpeechResponse, CreateTranscriptionRequest, CreateTranslationRequest, DallE2ImageSize,
-    EmbeddingInput, FileInput, FilePurpose, FunctionName, Image, ImageInput, ImageModel, ImageSize,
-    ImageUrl, ImagesResponse, ModerationInput, Prompt, ResponseFormat, Role, Stop,
+    EmbeddingInput, FileInput, FilePurpose, FunctionName, Image, ImageInput, ImageModel,
+    ImageResponseFormat, ImageSize, ImageUrl, ImagesResponse, ModerationInput, Prompt, Role, Stop,
     TimestampGranularity,
 };
 
@@ -200,14 +203,14 @@ impl Display for ImageModel {
     }
 }
 
-impl Display for ResponseFormat {
+impl Display for ImageResponseFormat {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             "{}",
             match self {
-                ResponseFormat::Url => "url",
-                ResponseFormat::B64Json => "b64_json",
+                Self::Url => "url",
+                Self::B64Json => "b64_json",
             }
         )
     }
@@ -536,6 +539,8 @@ impl From<(String, serde_json::Value)> for ChatCompletionFunctions {
     }
 }
 
+// todo: write macro for bunch of same looking From trait implementations below
+
 impl From<ChatCompletionRequestUserMessage> for ChatCompletionRequestMessage {
     fn from(value: ChatCompletionRequestUserMessage) -> Self {
         Self::User(value)
@@ -545,6 +550,12 @@ impl From<ChatCompletionRequestUserMessage> for ChatCompletionRequestMessage {
 impl From<ChatCompletionRequestSystemMessage> for ChatCompletionRequestMessage {
     fn from(value: ChatCompletionRequestSystemMessage) -> Self {
         Self::System(value)
+    }
+}
+
+impl From<ChatCompletionRequestDeveloperMessage> for ChatCompletionRequestMessage {
+    fn from(value: ChatCompletionRequestDeveloperMessage) -> Self {
+        Self::Developer(value)
     }
 }
 
@@ -566,6 +577,42 @@ impl From<ChatCompletionRequestToolMessage> for ChatCompletionRequestMessage {
     }
 }
 
+impl From<ChatCompletionRequestUserMessageContent> for ChatCompletionRequestUserMessage {
+    fn from(value: ChatCompletionRequestUserMessageContent) -> Self {
+        Self {
+            content: value,
+            name: None,
+        }
+    }
+}
+
+impl From<ChatCompletionRequestSystemMessageContent> for ChatCompletionRequestSystemMessage {
+    fn from(value: ChatCompletionRequestSystemMessageContent) -> Self {
+        Self {
+            content: value,
+            name: None,
+        }
+    }
+}
+
+impl From<ChatCompletionRequestDeveloperMessageContent> for ChatCompletionRequestDeveloperMessage {
+    fn from(value: ChatCompletionRequestDeveloperMessageContent) -> Self {
+        Self {
+            content: value,
+            name: None,
+        }
+    }
+}
+
+impl From<ChatCompletionRequestAssistantMessageContent> for ChatCompletionRequestAssistantMessage {
+    fn from(value: ChatCompletionRequestAssistantMessageContent) -> Self {
+        Self {
+            content: Some(value),
+            ..Default::default()
+        }
+    }
+}
+
 impl From<&str> for ChatCompletionRequestUserMessageContent {
     fn from(value: &str) -> Self {
         ChatCompletionRequestUserMessageContent::Text(value.into())
@@ -578,25 +625,131 @@ impl From<String> for ChatCompletionRequestUserMessageContent {
     }
 }
 
-impl From<Vec<ChatCompletionRequestMessageContentPart>>
+impl From<&str> for ChatCompletionRequestSystemMessageContent {
+    fn from(value: &str) -> Self {
+        ChatCompletionRequestSystemMessageContent::Text(value.into())
+    }
+}
+
+impl From<String> for ChatCompletionRequestSystemMessageContent {
+    fn from(value: String) -> Self {
+        ChatCompletionRequestSystemMessageContent::Text(value)
+    }
+}
+
+impl From<&str> for ChatCompletionRequestDeveloperMessageContent {
+    fn from(value: &str) -> Self {
+        ChatCompletionRequestDeveloperMessageContent::Text(value.into())
+    }
+}
+
+impl From<String> for ChatCompletionRequestDeveloperMessageContent {
+    fn from(value: String) -> Self {
+        ChatCompletionRequestDeveloperMessageContent::Text(value)
+    }
+}
+
+impl From<&str> for ChatCompletionRequestAssistantMessageContent {
+    fn from(value: &str) -> Self {
+        ChatCompletionRequestAssistantMessageContent::Text(value.into())
+    }
+}
+
+impl From<String> for ChatCompletionRequestAssistantMessageContent {
+    fn from(value: String) -> Self {
+        ChatCompletionRequestAssistantMessageContent::Text(value)
+    }
+}
+
+impl From<&str> for ChatCompletionRequestToolMessageContent {
+    fn from(value: &str) -> Self {
+        ChatCompletionRequestToolMessageContent::Text(value.into())
+    }
+}
+
+impl From<String> for ChatCompletionRequestToolMessageContent {
+    fn from(value: String) -> Self {
+        ChatCompletionRequestToolMessageContent::Text(value)
+    }
+}
+
+impl From<&str> for ChatCompletionRequestUserMessage {
+    fn from(value: &str) -> Self {
+        ChatCompletionRequestUserMessageContent::Text(value.into()).into()
+    }
+}
+
+impl From<String> for ChatCompletionRequestUserMessage {
+    fn from(value: String) -> Self {
+        value.as_str().into()
+    }
+}
+
+impl From<&str> for ChatCompletionRequestSystemMessage {
+    fn from(value: &str) -> Self {
+        ChatCompletionRequestSystemMessageContent::Text(value.into()).into()
+    }
+}
+
+impl From<&str> for ChatCompletionRequestDeveloperMessage {
+    fn from(value: &str) -> Self {
+        ChatCompletionRequestDeveloperMessageContent::Text(value.into()).into()
+    }
+}
+
+impl From<String> for ChatCompletionRequestSystemMessage {
+    fn from(value: String) -> Self {
+        value.as_str().into()
+    }
+}
+
+impl From<String> for ChatCompletionRequestDeveloperMessage {
+    fn from(value: String) -> Self {
+        value.as_str().into()
+    }
+}
+
+impl From<&str> for ChatCompletionRequestAssistantMessage {
+    fn from(value: &str) -> Self {
+        ChatCompletionRequestAssistantMessageContent::Text(value.into()).into()
+    }
+}
+
+impl From<String> for ChatCompletionRequestAssistantMessage {
+    fn from(value: String) -> Self {
+        value.as_str().into()
+    }
+}
+
+impl From<Vec<ChatCompletionRequestUserMessageContentPart>>
     for ChatCompletionRequestUserMessageContent
 {
-    fn from(value: Vec<ChatCompletionRequestMessageContentPart>) -> Self {
+    fn from(value: Vec<ChatCompletionRequestUserMessageContentPart>) -> Self {
         ChatCompletionRequestUserMessageContent::Array(value)
     }
 }
 
-impl From<ChatCompletionRequestMessageContentPartText> for ChatCompletionRequestMessageContentPart {
+impl From<ChatCompletionRequestMessageContentPartText>
+    for ChatCompletionRequestUserMessageContentPart
+{
     fn from(value: ChatCompletionRequestMessageContentPartText) -> Self {
-        ChatCompletionRequestMessageContentPart::Text(value)
+        ChatCompletionRequestUserMessageContentPart::Text(value)
     }
 }
 
 impl From<ChatCompletionRequestMessageContentPartImage>
-    for ChatCompletionRequestMessageContentPart
+    for ChatCompletionRequestUserMessageContentPart
 {
     fn from(value: ChatCompletionRequestMessageContentPartImage) -> Self {
-        ChatCompletionRequestMessageContentPart::ImageUrl(value)
+        ChatCompletionRequestUserMessageContentPart::ImageUrl(value)
+    }
+}
+
+impl From<ChatCompletionRequestMessageContentPartAudio>
+    for ChatCompletionRequestUserMessageContentPart
+{
+    fn from(value: ChatCompletionRequestMessageContentPartAudio) -> Self {
+        ChatCompletionRequestUserMessageContentPart::InputAudio(value)
     }
 }
 
@@ -654,10 +807,27 @@ impl Default for CreateMessageRequestContent {
     }
 }
 
+impl Default for ChatCompletionRequestDeveloperMessageContent {
+    fn default() -> Self {
+        ChatCompletionRequestDeveloperMessageContent::Text("".into())
+    }
+}
+
+impl Default for ChatCompletionRequestSystemMessageContent {
+    fn default() -> Self {
+        ChatCompletionRequestSystemMessageContent::Text("".into())
+    }
+}
+
+impl Default for ChatCompletionRequestToolMessageContent {
+    fn default() -> Self {
+        ChatCompletionRequestToolMessageContent::Text("".into())
+    }
+}
+
 // start: types to multipart from
 
-#[async_convert::async_trait]
-impl async_convert::TryFrom<CreateTranscriptionRequest> for reqwest::multipart::Form {
+impl AsyncTryFrom<CreateTranscriptionRequest> for reqwest::multipart::Form {
     type Error = OpenAIError;
 
     async fn try_from(request: CreateTranscriptionRequest) -> Result<Self, Self::Error> {
@@ -693,8 +863,7 @@ impl async_convert::TryFrom<CreateTranscriptionRequest> for reqwest::multipart::
     }
 }
 
-#[async_convert::async_trait]
-impl async_convert::TryFrom<CreateTranslationRequest> for reqwest::multipart::Form {
+impl AsyncTryFrom<CreateTranslationRequest> for reqwest::multipart::Form {
     type Error = OpenAIError;
 
     async fn try_from(request: CreateTranslationRequest) -> Result<Self, Self::Error> {
@@ -719,8 +888,7 @@ impl async_convert::TryFrom<CreateTranslationRequest> for reqwest::multipart::Fo
     }
 }
 
-#[async_convert::async_trait]
-impl async_convert::TryFrom<CreateImageEditRequest> for reqwest::multipart::Form {
+impl AsyncTryFrom<CreateImageEditRequest> for reqwest::multipart::Form {
     type Error = OpenAIError;
 
     async fn try_from(request: CreateImageEditRequest) -> Result<Self, Self::Error> {
@@ -761,8 +929,7 @@ impl async_convert::TryFrom<CreateImageEditRequest> for reqwest::multipart::Form
     }
 }
 
-#[async_convert::async_trait]
-impl async_convert::TryFrom<CreateImageVariationRequest> for reqwest::multipart::Form {
+impl AsyncTryFrom<CreateImageVariationRequest> for reqwest::multipart::Form {
     type Error = OpenAIError;
 
     async fn try_from(request: CreateImageVariationRequest) -> Result<Self, Self::Error> {
@@ -796,8 +963,7 @@ impl async_convert::TryFrom<CreateImageVariationRequest> for reqwest::multipart:
     }
 }
 
-#[async_convert::async_trait]
-impl async_convert::TryFrom<CreateFileRequest> for reqwest::multipart::Form {
+impl AsyncTryFrom<CreateFileRequest> for reqwest::multipart::Form {
     type Error = OpenAIError;
 
     async fn try_from(request: CreateFileRequest) -> Result<Self, Self::Error> {
@@ -805,6 +971,16 @@ impl async_convert::TryFrom<CreateFileRequest> for reqwest::multipart::Form {
         let form = reqwest::multipart::Form::new()
             .part("file", file_part)
             .text("purpose", request.purpose.to_string());
+        Ok(form)
+    }
+}
+
+impl AsyncTryFrom<AddUploadPartRequest> for reqwest::multipart::Form {
+    type Error = OpenAIError;
+
+    async fn try_from(request: AddUploadPartRequest) -> Result<Self, Self::Error> {
+        let file_part = create_file_part(request.data).await?;
+        let form = reqwest::multipart::Form::new().part("data", file_part);
         Ok(form)
     }
 }

@@ -39,9 +39,13 @@ pub struct CreateVectorStoreRequest {
 pub enum VectorStoreChunkingStrategy {
     /// The default strategy. This strategy currently uses a `max_chunk_size_tokens` of `800` and `chunk_overlap_tokens` of `400`.
     #[default]
+    #[serde(rename = "auto")]
     Auto,
-    ///
-    Static(StaticChunkingStrategy),
+    #[serde(rename = "static")]
+    Static {
+        #[serde(rename = "static")]
+        config: StaticChunkingStrategy,
+    },
 }
 
 /// Vector store expiration policy
@@ -105,8 +109,8 @@ pub struct VectorStoreFileCounts {
 pub struct ListVectorStoresResponse {
     pub object: String,
     pub data: Vec<VectorStoreObject>,
-    pub first_id: String,
-    pub last_id: String,
+    pub first_id: Option<String>,
+    pub last_id: Option<String>,
     pub has_more: bool,
 }
 
@@ -180,10 +184,9 @@ pub struct VectorStoreFileError {
 #[derive(Debug, Deserialize, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum VectorStoreFileErrorCode {
-    InternalError,
-    FileNotFound,
-    ParsingError,
-    UnhandledMimeType,
+    ServerError,
+    UnsupportedFile,
+    InvalidFile,
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Serialize)]

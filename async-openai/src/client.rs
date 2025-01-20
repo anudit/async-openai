@@ -2,6 +2,7 @@ use std::pin::Pin;
 
 use bytes::Bytes;
 use futures::{stream::StreamExt, Stream};
+use reqwest::multipart::Form;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use serde::{de::DeserializeOwned, Serialize};
 
@@ -11,8 +12,9 @@ use crate::{
     file::Files,
     image::Images,
     moderation::Moderations,
-    Assistants, Audio, Batches, Chat, Completions, Embeddings, FineTuning, Models, Threads,
-    VectorStores,
+    util::AsyncTryFrom,
+    Assistants, Audio, AuditLogs, Batches, Chat, Completions, Embeddings, FineTuning, Invites,
+    Models, Projects, Threads, Users, VectorStores,
 };
 
 #[derive(Debug, Clone, Default)]
@@ -135,6 +137,26 @@ impl<C: Config> Client<C> {
         Batches::new(self)
     }
 
+    /// To call [AuditLogs] group related APIs using this client.
+    pub fn audit_logs(&self) -> AuditLogs<C> {
+        AuditLogs::new(self)
+    }
+
+    /// To call [Invites] group related APIs using this client.
+    pub fn invites(&self) -> Invites<C> {
+        Invites::new(self)
+    }
+
+    /// To call [Users] group related APIs using this client.
+    pub fn users(&self) -> Users<C> {
+        Users::new(self)
+    }
+
+    /// To call [Projects] group related APIs using this client.
+    pub fn projects(&self) -> Projects<C> {
+        Projects::new(self)
+    }
+
     pub fn config(&self) -> &C {
         &self.config
     }
@@ -246,7 +268,7 @@ impl<C: Config> Client<C> {
     /// POST a form at {path} and return the response body
     pub(crate) async fn post_form_raw<F>(&self, path: &str, form: F) -> Result<Bytes, OpenAIError>
     where
-        reqwest::multipart::Form: async_convert::TryFrom<F, Error = OpenAIError>,
+        Form: AsyncTryFrom<F, Error = OpenAIError>,
         F: Clone,
     {
         let request_maker = || async {
@@ -255,7 +277,7 @@ impl<C: Config> Client<C> {
                 .post(self.config.url(path))
                 .query(&self.config.query())
                 .headers(self.config.headers())
-                .multipart(async_convert::TryFrom::try_from(form.clone()).await?)
+                .multipart(<Form as AsyncTryFrom<F>>::try_from(form.clone()).await?)
                 .build()?)
         };
 
@@ -266,7 +288,7 @@ impl<C: Config> Client<C> {
     pub(crate) async fn post_form<O, F>(&self, path: &str, form: F) -> Result<O, OpenAIError>
     where
         O: DeserializeOwned,
-        reqwest::multipart::Form: async_convert::TryFrom<F, Error = OpenAIError>,
+        Form: AsyncTryFrom<F, Error = OpenAIError>,
         F: Clone,
     {
         let request_maker = || async {
@@ -275,7 +297,7 @@ impl<C: Config> Client<C> {
                 .post(self.config.url(path))
                 .query(&self.config.query())
                 .headers(self.config.headers())
-                .multipart(async_convert::TryFrom::try_from(form.clone()).await?)
+                .multipart(<Form as AsyncTryFrom<F>>::try_from(form.clone()).await?)
                 .build()?)
         };
 
